@@ -183,6 +183,10 @@ async function runPipeline(rgb, gen) {
       }
       D.adjacency = { runs: runs.length, pairs, badRuns, badPairs, example };
       D.visited = vStat;
+      if (badRuns) {                                // dev-only sanity warning
+        console.warn('[neon-sketch] dev warning: stroke contains non-adjacent points before simplification — ' +
+          badRuns + ' run(s) with ' + badPairs + ' bad pair(s). First:', example);
+      }
     }
     mark('retrace');
 

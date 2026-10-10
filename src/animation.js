@@ -66,6 +66,15 @@ export function drawUpTo(anim, t) {
   let i = anim.curChunk;
   while (i < chunks.length) {
     const c = chunks[i];
+    // pen lift: a fresh chunk must begin at its own first point — never draw
+    // from a tip left behind by an earlier stroke (web-of-lines fix)
+    if (anim.vIdx === 0 && anim.penChunk !== i) {
+      const dist = anim.penPt ? Math.hypot(anim.penPt.x - c.pts[0].x, anim.penPt.y - c.pts[0].y) : 0;
+      if (DEV && dist > 1.5 && window.__diag) window.__diag.penLifts = (window.__diag.penLifts || 0) + 1;
+      anim.penPt = { x: c.pts[0].x, y: c.pts[0].y };
+      anim.penColor = c.color;
+      anim.penChunk = i;
+    }
     if (t < c.start) {                              // pause gap — pen waits at stroke start
       anim.penPt = { x: c.pts[0].x, y: c.pts[0].y };
       anim.penColor = c.color;
