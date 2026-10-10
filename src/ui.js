@@ -25,6 +25,7 @@ export const modeEl = $('mode');
 export const colorEl = $('color');
 export const glowEl = $('glow');
 export const penEl = $('pentip');
+export const smoothEl = $('smooth');
 
 // buttons
 export const playBtn = $('playBtn');

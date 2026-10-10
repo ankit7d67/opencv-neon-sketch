@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import {
   durEl, durVal, detEl, detVal, thickEl, thickVal, modeEl, colorEl,
-  glowEl, penEl, playBtn, pauseBtn, skipBtn, pngBtn, upBtn, recCheckbox,
+  glowEl, penEl, smoothEl, playBtn, pauseBtn, skipBtn, pngBtn, upBtn, recCheckbox,
   dropzone, dzHint, fileInput, clearBase, clearPen, setStatus, showError, updateButtons,
 } from './ui.js';
 import { handleFile, reprocess } from './processing.js';
@@ -69,6 +69,7 @@ penEl.addEventListener('change', () => {
   state.settings.penTip = penEl.checked;
   if (!penEl.checked) clearPen();
 });
+smoothEl.addEventListener('change', () => { state.settings.smooth = smoothEl.checked; reprocess(); });
 
 playBtn.addEventListener('click', replay);
 pauseBtn.addEventListener('click', togglePause);

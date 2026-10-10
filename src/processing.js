@@ -207,6 +207,18 @@ async function runPipeline(rgb, gen) {
         verts.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
       }
       approx.delete();
+      if (state.settings.smooth && verts.length > 2) {
+        // one light Chaikin pass — cuts corners, endpoints kept; opt-in only
+        const sm = [verts[0]];
+        for (let j = 0; j < verts.length - 1; j++) {
+          const a = verts[j], b = verts[j + 1];
+          sm.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 });
+          sm.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 });
+        }
+        sm.push(verts[verts.length - 1]);
+        verts.length = 0;
+        verts.push(...sm);
+      }
       if (longest) {                       // dev: longest segment after simplification
         let maxD = -1, seg = null;
         for (let j = 1; j < verts.length; j++) {
@@ -244,8 +256,8 @@ async function runPipeline(rgb, gen) {
     const hMax = rows - 1;
     for (const ch of chunks) {
       const mid = ch.pts[Math.floor(ch.pts.length / 2)];
-      const x = Math.max(0, Math.min(cols - 1, mid.x));
-      const y = Math.max(0, Math.min(rows - 1, mid.y));
+      const x = Math.max(0, Math.min(cols - 1, Math.round(mid.x)));   // round: smoothing yields fractions
+      const y = Math.max(0, Math.min(rows - 1, Math.round(mid.y)));
       let css;
       if (colorMode === 'original') {
         const ptr = bhsv.ucharPtr(y, x);

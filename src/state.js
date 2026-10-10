@@ -4,7 +4,7 @@ export const ABORT = { abort: true };              // internal cancel signal —
 export const state = {
   cvReady: false,
   gen: 0,                                   // bump to cancel stale processing / animation
-  settings: { duration: 20, detail: 1, thickness: 2, mode: 'auto', color: 'auto', glow: true, penTip: true },
+  settings: { duration: 20, detail: 1, thickness: 2, mode: 'auto', color: 'auto', glow: true, penTip: true, smooth: false },
   cache: null,                              // { rgb: cv.Mat } — fitted original, re-used on settings change
   processed: false,
   chunks: [],                               // [{ pts:[{x,y}..], color, newStroke, start, dur, times:[] }]
