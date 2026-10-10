@@ -30,7 +30,7 @@ Turn any image into a **glowing neon line-sketch** — animated stroke by stroke
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5180
 ```
 
 Open the URL, drop an image, and watch it draw.
@@ -69,7 +69,7 @@ tools/make-test-images.mjs   regenerates the fixtures
 
 ```bash
 npm run test:images   # regenerate test fixtures
-node tests/e2e.mjs http://localhost:5173
+node tests/e2e.mjs http://localhost:5180
 node tests/e2e.mjs file:///absolute/path/to/original.html baseline
 ```
 

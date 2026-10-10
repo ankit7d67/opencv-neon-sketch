@@ -7,7 +7,7 @@ const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 
-await page.goto('http://localhost:5173/', { waitUntil: 'load' });
+await page.goto('http://localhost:5180/', { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.__neon, null, { timeout: 40000 });
 
 const load = await page.evaluate(() => ({

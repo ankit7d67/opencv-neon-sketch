@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 const out = process.argv[2];
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
-await page.goto('http://localhost:5173/', { waitUntil: 'load' });
+await page.goto('http://localhost:5180/', { waitUntil: 'load' });
 await page.waitForFunction(() => document.getElementById('dzHint').textContent.includes('Click, drop'), null, { timeout: 40000 });
 await page.setInputFiles('#fileInput', 'C:\\Users\\mundr\\neon-sketch\\test-images\\neon-on-black.png');
 await page.waitForFunction(() => document.getElementById('status').textContent.includes('Drawing'), null, { timeout: 60000 });
