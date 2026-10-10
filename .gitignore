@@ -4,5 +4,7 @@ test-results/
 playwright-report/
 tests/screenshot-*.png
 tests/verify-*.png
+tests/shot-*.png
+tests/diag-*.json
 *.local
 .DS_Store

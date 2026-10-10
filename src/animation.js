@@ -3,6 +3,8 @@ import { state } from './state.js';
 import { baseCtx, glowCtx, penCtx, clearBase, clearPen, setStatus, setProgress, updateButtons } from './ui.js';
 import { compositeRecord } from './export.js';
 
+const DEV = import.meta.env.DEV;
+
 export function seg(ctx, a, b) {
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
@@ -14,6 +16,7 @@ export function seg(ctx, a, b) {
 // softened by CSS blur) + core line on top (source-over). No 'lighter'
 // during animation → no bright beads where round caps overlap.
 export function drawPiece(a, b, color) {
+  if (DEV && window.__diag) window.__diag.piecesFrame = (window.__diag.piecesFrame || 0) + 1;
   const w = state.settings.thickness;
   // core line
   const ctx = baseCtx;
@@ -51,7 +54,7 @@ export function setPen(pt, color) {
 
 export function resetDrawState() {
   const anim = state.anim;
-  anim.curChunk = 0; anim.vIdx = 0;
+  anim.curChunk = 0; anim.vIdx = 0; anim.penChunk = 0;
   const first = state.chunks[0];
   anim.penPt = first ? { x: first.pts[0].x, y: first.pts[0].y } : null;
   anim.penColor = first ? first.color : '#fff';
@@ -66,6 +69,7 @@ export function drawUpTo(anim, t) {
     if (t < c.start) {                              // pause gap — pen waits at stroke start
       anim.penPt = { x: c.pts[0].x, y: c.pts[0].y };
       anim.penColor = c.color;
+      anim.penChunk = i;
       setPen(anim.penPt, c.color);
       return;
     }
@@ -77,8 +81,24 @@ export function drawUpTo(anim, t) {
       }
       i++; anim.curChunk = i; anim.vIdx = 0;
       anim.penPt = from;
+      anim.penChunk = i - 1;
       continue;
     }
+    // dev-only: a stale pen tip about to be drawn at a fresh chunk means the
+    // next segment joins two different strokes (the "web of lines" symptom)
+    if (DEV && anim.vIdx === 0 && anim.penChunk !== i && anim.penPt && window.__diag && window.__diag.crossStroke) {
+      const dist = Math.hypot(anim.penPt.x - c.pts[0].x, anim.penPt.y - c.pts[0].y);
+      if (dist > 1.5) {
+        const prev = chunks[i - 1];
+        window.__diag.crossStroke.push({
+          chunkIdx: i, newStroke: !!c.newStroke, runId: c.runId,
+          prevRunId: prev ? prev.runId : null, dist: +dist.toFixed(1),
+          from: { x: Math.round(anim.penPt.x), y: Math.round(anim.penPt.y) },
+          to: { x: c.pts[0].x, y: c.pts[0].y },
+        });
+      }
+    }
+    anim.penChunk = i;                             // tip now belongs to chunk i
     drawPartial(anim, c, t - c.start);   // chunk-local time
     return;
   }
@@ -106,6 +126,14 @@ function drawPartial(anim, c, t) {
 function tick() {
   const anim = state.anim;
   if (!anim.alive || !anim.playing) return;
+  if (DEV && window.__diag) {                      // dev-only frame profiling
+    const d = window.__diag;
+    const now = performance.now();
+    if (d.frameLast) d.frameDeltas.push(+(now - d.frameLast).toFixed(2));
+    d.frameLast = now;
+    d.framePieces.push(d.piecesFrame || 0);
+    d.piecesFrame = 0;
+  }
   const elapsed = anim.offset + (performance.now() - anim.stamp);
   drawUpTo(anim, elapsed);
   const p = state.totalMs > 0 ? Math.min(100, (elapsed / state.totalMs) * 100) : 100;
@@ -131,6 +159,11 @@ function finishAnim() {
 
 export function replay() {
   if (!state.processed || !state.chunks.length) return;
+  if (DEV) {                                       // dev-only diag reset per run
+    const d = window.__diag = window.__diag || {};
+    d.crossStroke = []; d.frameDeltas = []; d.framePieces = [];
+    d.piecesFrame = 0; d.frameLast = 0; d.penLifts = 0;
+  }
   cancelAnim();
   clearBase();
   clearPen();

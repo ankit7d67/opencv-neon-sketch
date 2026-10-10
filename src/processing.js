@@ -8,6 +8,8 @@ import { buildTimeline } from './timeline.js';
 import { replay, cancelAnim } from './animation.js';
 import { stopRecording } from './export.js';
 
+const DEV = import.meta.env.DEV;
+
 export function hsvToCss(h, s, v) {
   const H = ((h * 2) % 360 + 360) % 360;           // OpenCV hue 0-179 → degrees
   const S = Math.max(0, Math.min(255, s)) / 255;
@@ -26,6 +28,14 @@ async function runPipeline(rgb, gen) {
   const rows = rgb.rows, cols = rgb.cols;
   const mats = [];
   const keep = m => { mats.push(m); return m; };
+  // dev-only diagnostics: per-stage ms + stroke-sanity numbers (window.__diag)
+  const D = DEV ? (window.__diag = window.__diag || {}) : null;
+  if (D) { D.stages = {}; D.img = { w: cols, h: rows }; }
+  let _t = DEV ? performance.now() : 0;
+  const mark = name => {
+    if (D) { D.stages[name] = +(performance.now() - _t).toFixed(1); _t = performance.now(); }
+  };
+  const pipeT0 = DEV ? performance.now() : 0;
   try {
     /* --- auto-detect: neon vs photo, colorful vs dull --- */
     const gray = keep(new cv.Mat());
@@ -52,6 +62,8 @@ async function runPipeline(rgb, gen) {
     const colorMode = state.settings.color === 'auto'
       ? ((mode === 'neon' || fracColorful > 0.12) ? 'original' : 'gradient')
       : state.settings.color;
+    if (D) D.detect = { mean: +mean.toFixed(1), fracBright: +fracBright.toFixed(3), fracColorful: +fracColorful.toFixed(3), mode };
+    mark('detect');
 
     /* --- binary line mask --- */
     const binary = keep(new cv.Mat());
@@ -72,6 +84,7 @@ async function runPipeline(rgb, gen) {
       const dilK = keep(cv.Mat.ones(2, 2, cv.CV_8U));
       cv.dilate(edges, binary, dilK);
     }
+    mark('binary');
 
     /* --- skeletonize (morphological, cap 200 iters) --- */
     let temp = binary.clone();
@@ -97,12 +110,15 @@ async function runPipeline(rgb, gen) {
     } finally {
       temp.delete();
     }
+    if (D) D.skeletonIters = iter;
+    mark('skeleton');
 
     /* --- contours: drop tiny, longest first --- */
     const contours = new cv.MatVector();
     const hierarchy = new cv.Mat();
     cv.findContours(skeleton, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_NONE);
     hierarchy.delete();
+    const found = contours.size();
     const big = [];
     for (let i = 0; i < contours.size(); i++) {
       const cnt = contours.get(i);
@@ -117,15 +133,26 @@ async function runPipeline(rgb, gen) {
     }
     contours.delete();
     big.sort((a, b) => b.length - a.length);
+    if (D) D.contours = { found, kept: big.length };
+    mark('contours');
 
     /* --- retrace removal: global visited map, split non-consecutive runs --- */
     const visited = new Uint8Array(rows * cols);
     const runs = [];
+    const vStat = DEV ? { len: visited.length, maxIdx: -1, outOfRange: 0, xOver: 0, yOver: 0 } : null;
     for (const c of big) {
       let run = [], prev = -2;
       for (let i = 0; i < c.length; i++) {
         const p = c[i];
+        if (vStat) {
+          if (p.x >= cols) vStat.xOver++;
+          if (p.y >= rows) vStat.yOver++;
+        }
         const idx = p.y * cols + p.x;
+        if (vStat) {
+          if (idx > vStat.maxIdx) vStat.maxIdx = idx;
+          if (idx < 0 || idx >= visited.length) vStat.outOfRange++;
+        }
         if (!visited[idx]) {
           visited[idx] = 1;
           if (run.length && i !== prev + 1) {
@@ -137,9 +164,32 @@ async function runPipeline(rgb, gen) {
       }
       if (run.length >= 6) runs.push(run);
     }
+    // dev-only sanity: runs must be 8-adjacent pixel chains — non-adjacent
+    // points here would mean the run split failed and simplification could shortcut
+    if (D) {
+      let badRuns = 0, badPairs = 0, pairs = 0, example = null;
+      for (const r of runs) {
+        let bad = false;
+        for (let i = 1; i < r.length; i++) {
+          pairs++;
+          const dx = Math.abs(r[i].x - r[i - 1].x), dy = Math.abs(r[i].y - r[i - 1].y);
+          if (dx > 1 || dy > 1) {
+            badPairs++;
+            if (!example) example = { from: { x: r[i - 1].x, y: r[i - 1].y }, to: { x: r[i].x, y: r[i].y }, at: i };
+            bad = true;
+          }
+        }
+        if (bad) badRuns++;
+      }
+      D.adjacency = { runs: runs.length, pairs, badRuns, badPairs, example };
+      D.visited = vStat;
+    }
+    mark('retrace');
 
     /* --- approxPolyDP → 8-vertex chunks sharing one vertex --- */
     const chunks = [];
+    let runId = 0;
+    const longest = DEV ? [] : null;
     for (const run of runs) {
       if (gen !== state.gen) throw ABORT;
       const pm = new cv.Mat(run.length, 1, cv.CV_32SC2);
@@ -153,10 +203,28 @@ async function runPipeline(rgb, gen) {
         verts.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
       }
       approx.delete();
-      for (let s = 0; s < verts.length - 1; s += 7) {
-        chunks.push({ pts: verts.slice(s, Math.min(s + 8, verts.length)), newStroke: s === 0 });
+      if (longest) {                       // dev: longest segment after simplification
+        let maxD = -1, seg = null;
+        for (let j = 1; j < verts.length; j++) {
+          const d = Math.hypot(verts[j].x - verts[j - 1].x, verts[j].y - verts[j - 1].y);
+          if (d > maxD) { maxD = d; seg = { from: { ...verts[j - 1] }, to: { ...verts[j] } }; }
+        }
+        longest.push({ runId, inLen: run.length, outLen: verts.length, maxSeg: +maxD.toFixed(1), seg });
       }
+      for (let s = 0; s < verts.length - 1; s += 7) {
+        chunks.push({ pts: verts.slice(s, Math.min(s + 8, verts.length)), newStroke: s === 0, runId });
+      }
+      runId++;
     }
+    if (D) {
+      D.approx = { calls: runs.length, inTotal: runs.reduce((n, r) => n + r.length, 0) };
+      longest.sort((a, b) => b.maxSeg - a.maxSeg);
+      D.longestSegments = longest.slice(0, 8);
+      D.runs = runs.length;
+      D.chunks = chunks.length;
+      D.strokes = chunks.reduce((n, c) => n + (c.newStroke ? 1 : 0), 0);
+    }
+    mark('simplify');
     if (!chunks.length) throw new Error('No lines found - try raising Detail or switching Mode.');
 
     /* --- chunk colors --- */
@@ -187,6 +255,8 @@ async function runPipeline(rgb, gen) {
       ch.color = css;
     }
     if (bhsv) bhsv.delete();
+    mark('colors');
+    if (D) D.totalMs = +(performance.now() - pipeT0).toFixed(1);
 
     return { chunks, mode, colorMode, w: cols, h: rows };
   } finally {
