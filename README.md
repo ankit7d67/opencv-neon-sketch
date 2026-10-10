@@ -29,11 +29,12 @@ Turn any image into a **glowing neon line-sketch** — animated stroke by stroke
 ## Run locally
 
 ```bash
+cd neon sketch
 npm install
 npm run dev        # http://localhost:5180
 ```
 
-Open the URL, drop an image, and watch it draw.
+Open the URL : https://ankit7d67.github.io/opencv-neon-sketch/
 
 ## Build & deploy
 
