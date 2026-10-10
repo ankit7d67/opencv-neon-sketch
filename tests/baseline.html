@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neon Sketch — glowing line art in your browser</title>
+<style>
+  :root{
+    --bg:#04060c; --panel:#0a101d; --line:#1b2942;
+    --cyan:#00f0ff; --green:#39ff88; --text:#dcebf7; --dim:#8298b3; --err:#ff4d6d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(1100px 520px at 50% -8%, #0b1830 0%, transparent 60%);
+    color:var(--text);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  header{width:100%;max-width:1000px;text-align:center;padding:24px 16px 4px}
+  h1{
+    margin:0;font-weight:800;letter-spacing:3px;
+    font-size:clamp(30px,6.5vw,46px);color:#eafcff;
+    text-shadow:0 0 8px rgba(0,240,255,.85),0 0 26px rgba(0,240,255,.45),0 0 60px rgba(57,255,136,.3);
+  }
+  .tagline{margin:8px 0 0;color:var(--dim);font-size:14px}
+  .privacy{margin:8px 0 0;font-size:12.5px;color:var(--green);text-shadow:0 0 12px rgba(57,255,136,.4)}
+  main{width:100%;max-width:1000px;padding:14px 16px 36px;display:flex;flex-direction:column;gap:14px}
+  .stage{
+    position:relative;min-height:min(60vh,540px);
+    border:1px solid var(--line);border-radius:16px;background:#020409;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;padding:14px;
+  }
+  .canvas-wrap{position:relative;max-width:100%;line-height:0}
+  #baseCv{display:block;max-width:100%;height:auto;border-radius:6px}
+  #penCv{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+  .dropzone{
+    position:absolute;inset:0;z-index:3;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    text-align:center;padding:24px;border:2px dashed #23405a;border-radius:14px;
+    background:rgba(3,8,16,.55);transition:border-color .2s,background .2s;
+  }
+  .dropzone.hot{border-color:var(--cyan);background:rgba(0,240,255,.08)}
+  .dropzone.hidden{display:none}
+  .dz-icon{font-size:34px;color:var(--cyan);text-shadow:0 0 18px rgba(0,240,255,.8)}
+  .dropzone h2{margin:0;font-size:22px;letter-spacing:2px;color:#eafcff}
+  .dropzone p{margin:0;color:var(--dim);font-size:13.5px}
+  .dropzone .note{color:var(--green);font-size:12.5px}
+  .dropzone .hint{color:var(--cyan);font-size:12px;opacity:.85}
+  .spinner{
+    position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;
+    gap:10px;background:rgba(2,4,9,.72);color:var(--cyan);font-size:14px;letter-spacing:1px;
+  }
+  .spin{width:22px;height:22px;border-radius:50%;border:3px solid rgba(0,240,255,.2);border-top-color:var(--cyan);animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px}
+  .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px 16px}
+  .ctl label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px}
+  .ctl .val{color:var(--cyan);font-weight:700;text-transform:none}
+  .ctl input[type=range]{width:100%;accent-color:var(--cyan)}
+  .ctl select{
+    width:100%;background:#0b1524;color:var(--text);border:1px solid #1f3b55;
+    border-radius:9px;padding:8px;font-size:13.5px;outline:none;
+  }
+  .ctl select:focus{border-color:var(--cyan)}
+  .toggles{display:flex;gap:18px;align-items:flex-end;padding-bottom:6px}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--text);cursor:pointer}
+  .toggle input{accent-color:var(--green);width:16px;height:16px}
+  .buttons{display:flex;flex-wrap:wrap;gap:8px}
+  .btn{
+    appearance:none;border:1px solid #1f3b55;background:#0b1524;color:var(--text);
+    padding:9px 14px;border-radius:10px;font-size:13.5px;cursor:pointer;font-family:inherit;
+    transition:box-shadow .15s,border-color .15s,transform .05s;
+  }
+  .btn:hover:not(:disabled){border-color:var(--cyan);box-shadow:0 0 12px rgba(0,240,255,.35)}
+  .btn:active:not(:disabled){transform:translateY(1px)}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn.primary{background:linear-gradient(135deg,var(--cyan),#37ffc8);color:#031018;font-weight:800;border-color:transparent}
+  .btn.primary:hover:not(:disabled){box-shadow:0 0 18px rgba(0,240,255,.6)}
+  .btn.check{display:inline-flex;align-items:center;gap:7px}
+  .btn.check input{accent-color:var(--green);width:15px;height:15px}
+  .progress{height:8px;border-radius:99px;background:#0d1826;border:1px solid var(--line);overflow:hidden}
+  .progress-fill{height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--cyan),var(--green));box-shadow:0 0 10px rgba(0,240,255,.5)}
+  .meta{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--dim)}
+  #progPct{color:var(--cyan);font-weight:700;min-width:40px;text-align:right}
+  .status{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .error{border:1px solid var(--err);color:#ffb3c1;background:rgba(255,77,109,.1);padding:9px 12px;border-radius:10px;font-size:13px}
+  .error[hidden]{display:none}
+  footer{width:100%;max-width:1000px;text-align:center;color:var(--dim);font-size:11.5px;padding:0 16px 26px}
+  @media (max-width:480px){
+    .panel{padding:12px}
+    .controls{grid-template-columns:repeat(2,1fr)}
+    .btn{flex:1 1 auto}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>NEON SKETCH</h1>
+  <p class="tagline">Your image, redrawn as a glowing line sketch — stroke by stroke.</p>
+  <p class="privacy">🔒 100% in-browser — your images never leave this device.</p>
+</header>
+<main>
+  <section class="stage" id="stage" aria-label="Canvas stage">
+    <div class="canvas-wrap" id="canvasWrap" hidden>
+      <canvas id="baseCv"></canvas>
+      <canvas id="penCv"></canvas>
+    </div>
+    <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload an image">
+      <div class="dz-icon">✦</div>
+      <h2>NEON SKETCH</h2>
+      <p><strong>Drop</strong> an image, <strong>click</strong> to browse, or <strong>paste</strong> (Ctrl+V)</p>
+      <p class="note">Runs entirely in your browser — images never leave your device.</p>
+      <p class="hint" id="dzHint">Loading OpenCV.js…</p>
+    </div>
+    <div class="spinner" id="spinner" hidden><div class="spin"></div><span>Processing…</span></div>
+  </section>
+  <section class="panel" aria-label="Controls">
+    <div class="controls">
+      <div class="ctl">
+        <label for="dur">Duration · <span class="val" id="durVal">20s</span></label>
+        <input type="range" id="dur" min="0" max="60" step="1" value="20">
+      </div>
+      <div class="ctl">
+        <label for="det">Detail · <span class="val" id="detVal">1.0</span></label>
+        <input type="range" id="det" min="0.5" max="2" step="0.1" value="1">
+      </div>
+      <div class="ctl">
+        <label for="thick">Line thickness · <span class="val" id="thickVal">2</span></label>
+        <input type="range" id="thick" min="1" max="5" step="0.5" value="2">
+      </div>
+      <div class="ctl">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="auto" selected>Auto</option>
+          <option value="neon">Neon</option>
+          <option value="photo">Photo</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label for="color">Color style</label>
+        <select id="color">
+          <option value="auto" selected>Auto</option>
+          <option value="original">Original</option>
+          <option value="gradient">Gradient</option>
+        </select>
+      </div>
+      <div class="ctl toggles">
+        <label class="toggle"><input type="checkbox" id="glow" checked> Glow</label>
+        <label class="toggle"><input type="checkbox" id="pentip" checked> Pen tip</label>
+      </div>
+    </div>
+    <div class="buttons">
+      <button class="btn primary" id="playBtn" disabled>↻ Replay</button>
+      <button class="btn" id="pauseBtn" disabled>⏸ Pause</button>
+      <button class="btn" id="skipBtn" disabled>⏭ Skip to end</button>
+      <button class="btn" id="pngBtn" disabled>⬇ Download PNG</button>
+      <button class="btn" id="upBtn">↺ Change image</button>
+      <label class="btn check"><input type="checkbox" id="rec" disabled> Record video (WebM)</label>
+    </div>
+    <div class="progress" id="progWrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="progress-fill" id="progFill"></div>
+    </div>
+    <div class="meta">
+      <span class="status" id="status" aria-live="polite">Loading OpenCV.js…</span>
+      <span id="progPct">0%</span>
+    </div>
+    <div class="error" id="errorBox" hidden></div>
+  </section>
+</main>
+<footer>OpenCV.js runs locally in your browser · no servers, no uploads · PNG + WebM exports</footer>
+<input type="file" id="fileInput" accept="image/*" hidden>
+
+<script>
+'use strict';
+/* =====================================================================
+   NEON SKETCH — single-file neon line-sketch animator
+   Sections: state → UI → processing → timeline → animation → export
+   ===================================================================== */
+
+/* ------------------------------ STATE ------------------------------ */
+const ABORT = { abort: true };              // internal cancel signal — never shown to user
+const state = {
+  cvReady: false,
+  gen: 0,                                   // bump to cancel stale processing / animation
+  settings: { duration: 20, detail: 1, thickness: 2, mode: 'auto', color: 'auto', glow: true, penTip: true },
+  cache: null,                              // { rgb: cv.Mat } — fitted original, re-used on settings change
+  processed: false,
+  chunks: [],                               // [{ pts:[{x,y}..], color, newStroke, start, dur, times:[] }]
+  totalMs: 0,
+  imgW: 0, imgH: 0,
+  mode: '', colorMode: '',
+  anim: { alive:false, started:false, playing:false, finished:false, offset:0, stamp:0, raf:0,
+          curChunk:0, vIdx:0, penPt:null, penColor:'#fff' },
+  recording: false, recorder: null, recBuf: [],
+};
+const yieldToBrowser = () => new Promise(r => setTimeout(r, 0));
+
+/* ------------------------------ UI ------------------------------ */
+const $ = id => document.getElementById(id);
+const stageEl = $('stage'), canvasWrap = $('canvasWrap'), baseCv = $('baseCv'), penCv = $('penCv');
+const dropzone = $('dropzone'), dzHint = $('dzHint'), spinner = $('spinner');
+const durEl = $('dur'), durVal = $('durVal'), detEl = $('det'), detVal = $('detVal');
+const thickEl = $('thick'), thickVal = $('thickVal'), modeEl = $('mode'), colorEl = $('color');
+const glowEl = $('glow'), penEl = $('pentip');
+const playBtn = $('playBtn'), pauseBtn = $('pauseBtn'), skipBtn = $('skipBtn');
+const pngBtn = $('pngBtn'), upBtn = $('upBtn'), recCheckbox = $('rec');
+const progWrap = $('progWrap'), progFill = $('progFill'), progPct = $('progPct');
+const statusEl = $('status'), errorBox = $('errorBox'), fileInput = $('fileInput');
+let baseCtx = null, penCtx = null, recCv = null, recCtx = null;
+
+function setStatus(msg) { statusEl.textContent = msg; }
+function setProgress(p) {
+  const v = Math.max(0, Math.min(100, p));
+  progFill.style.width = v + '%';
+  progPct.textContent = Math.round(v) + '%';
+  progWrap.setAttribute('aria-valuenow', String(Math.round(v)));
+}
+function showSpinner(on) { spinner.hidden = !on; }
+let errTimer = 0;
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.hidden = false;
+  setStatus('Error: ' + msg);
+  clearTimeout(errTimer);
+  errTimer = setTimeout(() => { errorBox.hidden = true; }, 9000);
+}
+function clearError() { errorBox.hidden = true; }
+
+function updateButtons() {
+  const has = state.processed, a = state.anim;
+  playBtn.disabled = !has;
+  pauseBtn.disabled = !(has && a.started && !a.finished);
+  pauseBtn.textContent = a.playing ? '⏸ Pause' : '▶ Resume';
+  skipBtn.disabled = !(has && a.started && !a.finished);
+  pngBtn.disabled = !has;
+  recCheckbox.disabled = !has;
+}
+
+/* ------------------------- image intake -------------------------- */
+function handleFile(file) {
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) return showError('Only image files are supported (image/*).');
+  if (file.size > 25 * 1024 * 1024) return showError('Image too large — maximum is 25 MB.');
+  if (!state.cvReady) return showError('Still loading OpenCV.js — try again in a second.');
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { URL.revokeObjectURL(url); startProcessing(img); };
+  img.onerror = () => { URL.revokeObjectURL(url); showError('Could not read that image file.'); };
+  img.src = url;
+}
+
+/* --------------------------- PROCESSING -------------------------- */
+function hsvToCss(h, s, v) {
+  const H = ((h * 2) % 360 + 360) % 360;           // OpenCV hue 0-179 → degrees
+  const S = Math.max(0, Math.min(255, s)) / 255;
+  const V = Math.max(0, Math.min(255, v)) / 255;
+  const c = V * S, x = c * (1 - Math.abs((H / 60) % 2 - 1)), m = V - c;
+  let r = 0, g = 0, b = 0;
+  if (H < 60) { r = c; g = x; } else if (H < 120) { r = x; g = c; }
+  else if (H < 180) { g = c; b = x; } else if (H < 240) { g = x; b = c; }
+  else if (H < 300) { r = x; b = c; } else { r = c; b = x; }
+  const t = n => Math.round((n + m) * 255);
+  return `rgb(${t(r)},${t(g)},${t(b)})`;
+}
+
+// full pipeline: detect → binary → skeleton → contours → chunks → colors
+async function runPipeline(rgb, gen) {
+  const rows = rgb.rows, cols = rgb.cols;
+  const mats = [];
+  const keep = m => { mats.push(m); return m; };
+  try {
+    /* --- auto-detect: neon vs photo, colorful vs dull --- */
+    const gray = keep(new cv.Mat());
+    cv.cvtColor(rgb, gray, cv.COLOR_RGB2GRAY);
+    let sum = 0;                                    // mean(gray), manual = safe
+    const gd = gray.data;
+    for (let i = 0; i < gd.length; i++) sum += gd[i];
+    const mean = sum / gd.length;
+    const bright = keep(new cv.Mat());
+    cv.threshold(gray, bright, 40, 255, cv.THRESH_BINARY);
+    const fracBright = cv.countNonZero(bright) / (rows * cols);
+    const hsv = keep(new cv.Mat());
+    cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+    // colorful fraction: manual HSV scan — inRange with Scalar/1×1-Mat bounds
+    // is unreliable in OpenCV.js 4.9, so we count pixels directly (S > 60, V > 40)
+    let colorful = 0;
+    const hd = hsv.data;
+    for (let i = 0; i < hd.length; i += 3) {
+      if (hd[i + 1] > 60 && hd[i + 2] > 40) colorful++;
+    }
+    const fracColorful = colorful / (rows * cols);
+    const autoNeon = mean < 70 && fracBright < 0.25;
+    const mode = state.settings.mode === 'auto' ? (autoNeon ? 'neon' : 'photo') : state.settings.mode;
+    const colorMode = state.settings.color === 'auto'
+      ? ((mode === 'neon' || fracColorful > 0.12) ? 'original' : 'gradient')
+      : state.settings.color;
+
+    /* --- binary line mask --- */
+    const binary = keep(new cv.Mat());
+    if (mode === 'neon') {
+      cv.threshold(gray, binary, 40, 255, cv.THRESH_BINARY);
+    } else {
+      const bil = keep(new cv.Mat());
+      cv.bilateralFilter(rgb, bil, 7, 40, 40);
+      const bg = keep(new cv.Mat());
+      cv.cvtColor(bil, bg, cv.COLOR_RGB2GRAY);
+      const bl = keep(new cv.Mat());
+      cv.blur(bg, bl, new cv.Size(3, 3));
+      const o = keep(new cv.Mat());
+      const otsu = cv.threshold(bl, o, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+      const hi = Math.max(20, otsu / state.settings.detail);
+      const edges = keep(new cv.Mat());
+      cv.Canny(bl, edges, hi / 2, hi);
+      const dilK = keep(cv.Mat.ones(2, 2, cv.CV_8U));
+      cv.dilate(edges, binary, dilK);
+    }
+
+    /* --- skeletonize (morphological, cap 200 iters) --- */
+    let temp = binary.clone();
+    const skeleton = keep(new cv.Mat.zeros(rows, cols, cv.CV_8U));
+    const cross = keep(cv.getStructuringElement(cv.MORPH_CROSS, new cv.Size(3, 3)));
+    let iter = 0;
+    try {
+      while (cv.countNonZero(temp) > 0 && iter < 200) {
+        const eroded = new cv.Mat();
+        cv.erode(temp, eroded, cross);
+        const opened = new cv.Mat();
+        cv.dilate(eroded, opened, cross);
+        const diff = new cv.Mat();
+        cv.subtract(temp, opened, diff);
+        cv.bitwise_or(skeleton, diff, skeleton);
+        temp.delete(); temp = eroded;
+        opened.delete(); diff.delete();
+        if (++iter % 4 === 0) {                     // spinner ke liye browser ko haath
+          await yieldToBrowser();
+          if (gen !== state.gen) throw ABORT;
+        }
+      }
+    } finally {
+      temp.delete();
+    }
+
+    /* --- contours: drop tiny, longest first --- */
+    const contours = new cv.MatVector();
+    const hierarchy = new cv.Mat();
+    cv.findContours(skeleton, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_NONE);
+    hierarchy.delete();
+    const big = [];
+    for (let i = 0; i < contours.size(); i++) {
+      const cnt = contours.get(i);
+      const n = cnt.rows;
+      if (n >= 12) {
+        const ds = cnt.data32S;
+        const pts = new Array(n);
+        for (let j = 0; j < n; j++) pts[j] = { x: ds[j * 2], y: ds[j * 2 + 1] };
+        big.push(pts);
+      }
+      cnt.delete();
+    }
+    contours.delete();
+    big.sort((a, b) => b.length - a.length);
+
+    /* --- retrace removal: global visited map, split non-consecutive runs --- */
+    const visited = new Uint8Array(rows * cols);
+    const runs = [];
+    for (const c of big) {
+      let run = [], prev = -2;
+      for (let i = 0; i < c.length; i++) {
+        const p = c[i];
+        const idx = p.y * cols + p.x;
+        if (!visited[idx]) {
+          visited[idx] = 1;
+          if (run.length && i !== prev + 1) {
+            if (run.length >= 6) runs.push(run);
+            run = [];
+          }
+          run.push(p); prev = i;
+        }
+      }
+      if (run.length >= 6) runs.push(run);
+    }
+
+    /* --- approxPolyDP → 8-vertex chunks sharing one vertex --- */
+    const chunks = [];
+    for (const run of runs) {
+      if (gen !== state.gen) throw ABORT;
+      const pm = new cv.Mat(run.length, 1, cv.CV_32SC2);
+      const pd = pm.data32S;
+      for (let j = 0; j < run.length; j++) { pd[j * 2] = run[j].x; pd[j * 2 + 1] = run[j].y; }
+      const approx = new cv.Mat();
+      cv.approxPolyDP(pm, approx, 1.0, false);
+      pm.delete();
+      const verts = [];
+      for (let j = 0; j < approx.rows; j++) {
+        verts.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
+      }
+      approx.delete();
+      for (let s = 0; s < verts.length - 1; s += 7) {
+        chunks.push({ pts: verts.slice(s, Math.min(s + 8, verts.length)), newStroke: s === 0 });
+      }
+    }
+    if (!chunks.length) throw new Error('No lines found - try raising Detail or switching Mode.');
+
+    /* --- chunk colors --- */
+    let bhsv = null;
+    if (colorMode === 'original') {
+      const bs = new cv.Mat();
+      const k = mode === 'neon' ? 3 : 5;
+      cv.blur(rgb, bs, new cv.Size(k, k));
+      bhsv = new cv.Mat();
+      cv.cvtColor(bs, bhsv, cv.COLOR_RGB2HSV);
+      bs.delete();
+    }
+    const hMax = rows - 1;
+    for (const ch of chunks) {
+      const mid = ch.pts[Math.floor(ch.pts.length / 2)];
+      const x = Math.max(0, Math.min(cols - 1, mid.x));
+      const y = Math.max(0, Math.min(rows - 1, mid.y));
+      let css;
+      if (colorMode === 'original') {
+        const ptr = bhsv.ucharPtr(y, x);
+        let s = ptr[1];
+        s = mode === 'neon' ? Math.min(255, s * 1.3) : Math.min(255, s * 1.4 + 30);
+        css = hsvToCss(ptr[0], s, 255);
+      } else {
+        const h = 55 + 60 * (hMax > 0 ? y / hMax : 0);   // per-row hue 55→115
+        css = hsvToCss(h, 200, 255);
+      }
+      ch.color = css;
+    }
+    if (bhsv) bhsv.delete();
+
+    return { chunks, mode, colorMode, w: cols, h: rows };
+  } finally {
+    for (const m of mats) m.delete();                // har Mat ka hisaab
+  }
+}
+
+// new upload: fit → white bg → INTER_AREA → RGB, then pipeline
+async function startProcessing(img) {
+  const gen = ++state.gen;
+  cancelAnim();
+  stopRecording(true);
+  clearError();
+  showSpinner(true);
+  setStatus('Processing…');
+  await yieldToBrowser();                          // spinner dikhe before heavy work
+  let rgb3 = null;
+  try {
+    if (state.cache) { state.cache.rgb.delete(); state.cache = null; }
+    const maxH = Math.min(0.7 * window.innerHeight, 800);
+    const maxW = Math.max(120, stageEl.clientWidth - 28);
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    const scale = Math.min(maxW / nw, maxH / nh, 1);
+    const w = Math.max(1, Math.round(nw * scale));
+    const h = Math.max(1, Math.round(nh * scale));
+    const oc = document.createElement('canvas');
+    oc.width = nw; oc.height = nh;
+    const octx = oc.getContext('2d');
+    octx.fillStyle = '#ffffff';                    // transparent → white
+    octx.fillRect(0, 0, nw, nh);
+    octx.drawImage(img, 0, 0);
+    let src = null, rgb = null;
+    try {
+      src = cv.imread(oc);
+      rgb = new cv.Mat();
+      cv.resize(src, rgb, new cv.Size(w, h), 0, 0, cv.INTER_AREA);
+    } finally { if (src) src.delete(); }
+    rgb3 = new cv.Mat();
+    cv.cvtColor(rgb, rgb3, cv.COLOR_RGBA2RGB);
+    rgb.delete();
+    state.cache = { rgb: rgb3 };
+    const res = await runPipeline(rgb3, gen);
+    if (gen !== state.gen) return;                 // koi naya upload aa gaya
+    applyResult(res);
+    canvasWrap.hidden = false;
+    dropzone.classList.add('hidden');
+    replay();
+  } catch (e) {
+    if (e !== ABORT) showError(e.message || String(e));
+  } finally {
+    if (gen === state.gen) showSpinner(false);
+  }
+}
+
+// re-run pipeline from cached image (Detail / Mode / Color changed)
+async function reprocess() {
+  if (!state.cache) return;
+  const gen = ++state.gen;
+  cancelAnim();
+  stopRecording(true);
+  clearError();
+  showSpinner(true);
+  setStatus('Processing…');
+  await yieldToBrowser();
+  try {
+    const res = await runPipeline(state.cache.rgb, gen);
+    if (gen !== state.gen) return;
+    applyResult(res);
+    replay();
+  } catch (e) {
+    if (e !== ABORT) showError(e.message || String(e));
+  } finally {
+    if (gen === state.gen) showSpinner(false);
+  }
+}
+
+function applyResult(res) {
+  state.chunks = res.chunks;
+  state.mode = res.mode;
+  state.colorMode = res.colorMode;
+  state.imgW = res.w;
+  state.imgH = res.h;
+  state.processed = true;
+  buildTimeline();
+  sizeCanvases();
+  clearBase();
+  clearPen();
+  setStatus(`Ready — ${res.mode} mode, ${res.colorMode} colors.`);
+  updateButtons();
+}
+
+function sizeCanvases() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, state.imgW), h = Math.max(1, state.imgH);
+  for (const c of [baseCv, penCv]) {
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+    c.style.width = w + 'px';
+    c.style.height = h + 'px';
+  }
+  baseCtx = baseCv.getContext('2d');
+  baseCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  penCtx = penCv.getContext('2d');
+  penCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  recCv = document.createElement('canvas');
+  recCv.width = baseCv.width;
+  recCv.height = baseCv.height;
+  recCtx = recCv.getContext('2d');
+}
+
+function clearBase() { if (baseCtx) baseCtx.clearRect(0, 0, state.imgW, state.imgH); }
+function clearPen() { if (penCtx) penCtx.clearRect(0, 0, state.imgW, state.imgH); }
+
+/* ---------------------------- TIMELINE ------------------------- */
+// clock-based: constant pen speed, ends in exactly Duration seconds
+function buildTimeline() {
+  const chunks = state.chunks;
+  const totalMs = state.settings.duration * 1000;
+  const numStrokes = chunks.reduce((n, c) => n + (c.newStroke ? 1 : 0), 0);
+  let totalLength = 0;
+  for (const c of chunks) {
+    let L = 0;
+    for (let i = 1; i < c.pts.length; i++) {
+      L += Math.hypot(c.pts[i].x - c.pts[i - 1].x, c.pts[i].y - c.pts[i - 1].y);
+    }
+    c.len = L; totalLength += L;
+  }
+  const pauseMs = numStrokes ? Math.min(40, 0.25 * totalMs / numStrokes) : 0;
+  const msPerPx = totalLength > 0 ? Math.max(0, (totalMs - numStrokes * pauseMs) / totalLength) : 0;
+  let cursor = 0;
+  for (const c of chunks) {
+    if (c.newStroke) cursor += pauseMs;
+    c.start = cursor;
+    c.times = [0];
+    for (let i = 1; i < c.pts.length; i++) {
+      const d = Math.hypot(c.pts[i].x - c.pts[i - 1].x, c.pts[i].y - c.pts[i - 1].y);
+      c.times.push(c.times[i - 1] + d * msPerPx);
+    }
+    c.dur = c.times[c.times.length - 1];
+    cursor += c.dur;
+  }
+  state.totalMs = totalMs;
+}
+
+/* ---------------------------- ANIMATION ------------------------ */
+function seg(ctx, a, b) {
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+}
+
+// one tiny piece of stroke: 3 glow layers (lighter) + core, round caps
+function drawPiece(a, b, color) {
+  const ctx = baseCtx, w = state.settings.thickness;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = color;
+  if (state.settings.glow) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.16; ctx.lineWidth = w + 8; seg(ctx, a, b);
+    ctx.globalAlpha = 0.38; ctx.lineWidth = w + 3; seg(ctx, a, b);
+    ctx.globalAlpha = 1;    ctx.lineWidth = w;     seg(ctx, a, b);
+    ctx.globalCompositeOperation = 'source-over';
+  } else {
+    ctx.globalAlpha = 1; ctx.lineWidth = w; seg(ctx, a, b);
+  }
+}
+
+function setPen(pt, color) {
+  clearPen();
+  if (!state.settings.penTip || !pt) return;
+  const ctx = penCtx;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = color;                            // halo r=9, stroke color
+  ctx.beginPath(); ctx.arc(pt.x, pt.y, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.95;
+  ctx.fillStyle = '#ffffff';                        // core r=3
+  ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function resetDrawState() {
+  const anim = state.anim;
+  anim.curChunk = 0; anim.vIdx = 0;
+  const first = state.chunks[0];
+  anim.penPt = first ? { x: first.pts[0].x, y: first.pts[0].y } : null;
+  anim.penColor = first ? first.color : '#fff';
+}
+
+// draw only the newly-revealed part up to time t
+function drawUpTo(anim, t) {
+  const chunks = state.chunks;
+  let i = anim.curChunk;
+  while (i < chunks.length) {
+    const c = chunks[i];
+    if (t < c.start) {                              // pause gap — pen waits at stroke start
+      anim.penPt = { x: c.pts[0].x, y: c.pts[0].y };
+      anim.penColor = c.color;
+      setPen(anim.penPt, c.color);
+      return;
+    }
+    if (t >= c.start + c.dur) {                     // chunk fully due — draw it whole
+      let from = (i === anim.curChunk && anim.vIdx > 0) ? anim.penPt : c.pts[0];
+      for (let k = anim.vIdx; k < c.pts.length - 1; k++) {
+        drawPiece(from, c.pts[k + 1], c.color);
+        from = c.pts[k + 1];
+      }
+      i++; anim.curChunk = i; anim.vIdx = 0;
+      anim.penPt = from;
+      continue;
+    }
+    drawPartial(anim, c, t - c.start);   // chunk-local time
+    return;
+  }
+}
+
+function drawPartial(anim, c, t) {
+  const pts = c.pts, times = c.times;
+  while (anim.vIdx < pts.length - 1 && t >= times[anim.vIdx + 1]) {
+    drawPiece(anim.penPt, pts[anim.vIdx + 1], c.color);
+    anim.penPt = pts[anim.vIdx + 1];
+    anim.vIdx++;
+  }
+  if (anim.vIdx < pts.length - 1) {
+    const k = anim.vIdx;
+    const span = times[k + 1] - times[k];
+    const f = span > 0 ? Math.min(1, Math.max(0, (t - times[k]) / span)) : 1;
+    const tx = pts[k].x + (pts[k + 1].x - pts[k].x) * f;
+    const ty = pts[k].y + (pts[k + 1].y - pts[k].y) * f;
+    drawPiece(anim.penPt, { x: tx, y: ty }, c.color);
+    anim.penPt = { x: tx, y: ty };
+  }
+  setPen(anim.penPt, c.color);
+}
+
+function tick() {
+  const anim = state.anim;
+  if (!anim.alive || !anim.playing) return;
+  const elapsed = anim.offset + (performance.now() - anim.stamp);
+  drawUpTo(anim, elapsed);
+  const p = state.totalMs > 0 ? Math.min(100, (elapsed / state.totalMs) * 100) : 100;
+  setProgress(p);
+  setStatus('Drawing… ' + Math.round(p) + '%');
+  compositeRecord();
+  if (elapsed >= state.totalMs) { finishAnim(); return; }
+  anim.raf = requestAnimationFrame(tick);
+}
+
+function finishAnim() {
+  const anim = state.anim;
+  anim.playing = false;
+  anim.finished = true;
+  cancelAnimationFrame(anim.raf);
+  clearPen();
+  setProgress(100);
+  setStatus('Done — Download PNG, record video, or hit Replay.');
+  updateButtons();
+  compositeRecord();
+}
+
+function replay() {
+  if (!state.processed || !state.chunks.length) return;
+  cancelAnim();
+  clearBase();
+  clearPen();
+  state.anim = { alive: true, started: true, playing: false, finished: false,
+                 offset: 0, stamp: 0, raf: 0, curChunk: 0, vIdx: 0, penPt: null, penColor: '#fff' };
+  resetDrawState();
+  updateButtons();
+  if (state.totalMs <= 0) { skipToEnd(); return; }  // Duration 0 = instant
+  const anim = state.anim;
+  setPen(anim.penPt, anim.penColor);
+  anim.playing = true;
+  anim.stamp = performance.now();
+  setStatus('Drawing…');
+  anim.raf = requestAnimationFrame(tick);
+}
+
+function togglePause() {
+  const anim = state.anim;
+  if (!state.processed || !anim.started || anim.finished) return;
+  if (anim.playing) {
+    anim.offset += performance.now() - anim.stamp;
+    anim.playing = false;
+    cancelAnimationFrame(anim.raf);
+    setStatus('Paused.');
+  } else {
+    anim.stamp = performance.now();
+    anim.playing = true;
+    setStatus('Drawing…');
+    anim.raf = requestAnimationFrame(tick);
+  }
+  updateButtons();
+  compositeRecord();
+}
+
+function skipToEnd() {
+  const anim = state.anim;
+  if (!state.processed || !anim.started || anim.finished) return;
+  anim.playing = false;
+  cancelAnimationFrame(anim.raf);
+  const chunks = state.chunks;
+  if (anim.curChunk < chunks.length) {
+    const c = chunks[anim.curChunk];
+    let from = anim.vIdx > 0 ? anim.penPt : c.pts[0];
+    for (let k = anim.vIdx; k < c.pts.length - 1; k++) {
+      drawPiece(from, c.pts[k + 1], c.color);
+      from = c.pts[k + 1];
+    }
+  }
+  for (let i = anim.curChunk + 1; i < chunks.length; i++) {
+    const c = chunks[i];
+    for (let k = 0; k < c.pts.length - 1; k++) drawPiece(c.pts[k], c.pts[k + 1], c.color);
+  }
+  finishAnim();
+}
+
+function cancelAnim() {
+  const anim = state.anim;
+  if (anim) { anim.alive = false; anim.playing = false; cancelAnimationFrame(anim.raf); }
+}
+
+/* ----------------------------- EXPORT -------------------------- */
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+// PNG: base + blurred additive copies (3px @0.7, 9px @0.45)
+function exportPNG() {
+  if (!state.processed || !baseCv) return;
+  const out = document.createElement('canvas');
+  out.width = baseCv.width;
+  out.height = baseCv.height;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(baseCv, 0, 0);
+  if ('filter' in ctx) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.7;
+    ctx.filter = 'blur(3px)';
+    ctx.drawImage(baseCv, 0, 0);
+    ctx.globalAlpha = 0.45;
+    ctx.filter = 'blur(9px)';
+    ctx.drawImage(baseCv, 0, 0);
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  out.toBlob(blob => { if (blob) downloadBlob(blob, 'neon-sketch.png'); }, 'image/png');
+}
+
+// video: offscreen composite canvas → captureStream → MediaRecorder → WebM
+function compositeRecord() {
+  if (!state.recording || !recCtx) return;
+  recCtx.drawImage(baseCv, 0, 0);
+  recCtx.drawImage(penCv, 0, 0);
+}
+
+function startRecording() {
+  stopRecording(false);                    // stop any old recording, keep checkbox state
+  if (!recCv) return;
+  const stream = recCv.captureStream(30);
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+    .find(m => MediaRecorder.isTypeSupported(m)) || '';
+  state.recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  state.recBuf = [];
+  state.recorder.ondataavailable = e => { if (e.data && e.data.size) state.recBuf.push(e.data); };
+  state.recorder.onstop = () => {
+    const buf = state.recBuf;
+    state.recBuf = [];
+    if (buf.length) downloadBlob(new Blob(buf, { type: 'video/webm' }), 'neon-sketch.webm');
+  };
+  state.recorder.start(250);
+  state.recording = true;
+  compositeRecord();
+  setStatus('Recording video… uncheck to stop & download.');
+}
+
+function stopRecording(internal) {
+  const rec = state.recorder;
+  if (rec && rec.state !== 'inactive') {
+    const buf = state.recBuf;
+    rec.onstop = () => {
+      if (buf.length) downloadBlob(new Blob(buf, { type: 'video/webm' }), 'neon-sketch.webm');
+    };
+    try { rec.stop(); } catch (e) { /* already stopped */ }
+  }
+  state.recorder = null;
+  state.recording = false;
+  if (internal) recCheckbox.checked = false;
+}
+
+/* --------------------------- WIRING ---------------------------- */
+const durLabel = v => (v === 0 ? 'instant' : v + 's');
+
+durEl.addEventListener('input', () => {
+  state.settings.duration = parseInt(durEl.value, 10);
+  durVal.textContent = durLabel(state.settings.duration);
+  if (!state.processed) return;
+  // sirf timeline rebuild — progress fraction bacha ke chalao
+  const anim = state.anim;
+  const frac = (anim.started && !anim.finished && state.totalMs > 0)
+    ? (anim.offset + (anim.playing ? performance.now() - anim.stamp : 0)) / state.totalMs
+    : 0;
+  buildTimeline();
+  if (anim.started && !anim.finished) {
+    clearBase();
+    clearPen();
+    resetDrawState();
+    const target = frac * state.totalMs;
+    if (target > 0) drawUpTo(anim, target);
+    if (anim.curChunk >= state.chunks.length && state.chunks.length) {
+      const last = state.chunks[state.chunks.length - 1];
+      anim.penPt = { x: last.pts[last.pts.length - 1].x, y: last.pts[last.pts.length - 1].y };
+      setPen(anim.penPt, last.color);
+    }
+    anim.offset = target;
+    anim.stamp = performance.now();
+    compositeRecord();
+  }
+});
+
+let detTimer = 0;
+detEl.addEventListener('input', () => {
+  state.settings.detail = parseFloat(detEl.value);
+  detVal.textContent = state.settings.detail.toFixed(1);
+  clearTimeout(detTimer);
+  detTimer = setTimeout(reprocess, 250);            // debounce — heavy pipeline
+});
+
+thickEl.addEventListener('input', () => {
+  state.settings.thickness = parseFloat(thickEl.value);
+  thickVal.textContent = String(state.settings.thickness);
+  if (!state.processed || !state.anim.started) return;
+  if (state.anim.finished) {                        // redraw finished art at new width
+    clearBase();
+    resetDrawState();
+    drawUpTo(state.anim, Infinity);
+    compositeRecord();
+  } else {
+    replay();
+  }
+});
+
+modeEl.addEventListener('change', () => { state.settings.mode = modeEl.value; reprocess(); });
+colorEl.addEventListener('change', () => { state.settings.color = colorEl.value; reprocess(); });
+glowEl.addEventListener('change', () => { state.settings.glow = glowEl.checked; });
+penEl.addEventListener('change', () => {
+  state.settings.penTip = penEl.checked;
+  if (!penEl.checked) clearPen();
+});
+
+playBtn.addEventListener('click', replay);
+pauseBtn.addEventListener('click', togglePause);
+skipBtn.addEventListener('click', skipToEnd);
+pngBtn.addEventListener('click', exportPNG);
+upBtn.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+});
+fileInput.addEventListener('change', () => { handleFile(fileInput.files[0]); fileInput.value = ''; });
+
+recCheckbox.addEventListener('change', () => {
+  if (recCheckbox.checked) {
+    if (!state.processed) { recCheckbox.checked = false; return showError('Upload an image first.'); }
+    startRecording();
+  } else {
+    stopRecording(false);
+  }
+});
+
+// drag-drop anywhere, paste anywhere
+window.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('hot'); });
+window.addEventListener('dragleave', e => { if (!e.relatedTarget) dropzone.classList.remove('hot'); });
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('hot');
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+    handleFile(e.dataTransfer.files[0]);
+  }
+});
+window.addEventListener('paste', e => {
+  if (!e.clipboardData || !e.clipboardData.items) return;
+  for (const item of e.clipboardData.items) {
+    if (item.type && item.type.startsWith('image/')) { handleFile(item.getAsFile()); break; }
+  }
+});
+
+/* ------------------------------ INIT --------------------------- */
+window.cvReady = () => {
+  state.cvReady = true;
+  dzHint.textContent = 'Click, drop, or paste an image to begin';
+  setStatus('Ready — drop, click, or paste an image.');
+};
+setTimeout(() => {
+  if (!state.cvReady) {
+    dzHint.textContent = 'OpenCV.js failed to load — check connection and reload.';
+    showError('OpenCV.js failed to load. Check your connection and reload the page.');
+  }
+}, 15000);
+
+if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  durEl.value = '0';
+  state.settings.duration = 0;
+  durVal.textContent = 'instant';
+}
+window.__neon = { state };   // test hook for the e2e suite
+updateButtons();
+</script>
+<script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="window.cvReady()" onerror="window.__cvErr=1"></script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neon Sketch — glowing line art in your browser</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+<header>
+  <h1>NEON SKETCH</h1>
+  <p class="tagline">Your image, redrawn as a glowing line sketch — stroke by stroke.</p>
+  <p class="privacy">🔒 100% in-browser — your images never leave this device.</p>
+</header>
+<main>
+  <section class="stage" id="stage" aria-label="Canvas stage">
+    <div class="canvas-wrap" id="canvasWrap" hidden>
+      <canvas id="glowCv"></canvas>
+      <canvas id="baseCv"></canvas>
+      <canvas id="penCv"></canvas>
+    </div>
+    <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload an image">
+      <div class="dz-icon">✦</div>
+      <h2>NEON SKETCH</h2>
+      <p><strong>Drop</strong> an image, <strong>click</strong> to browse, or <strong>paste</strong> (Ctrl+V)</p>
+      <p class="note">Runs entirely in your browser — images never leave your device.</p>
+      <p class="hint" id="dzHint">Loading OpenCV.js…</p>
+    </div>
+    <div class="spinner" id="spinner" hidden><div class="spin"></div><span>Processing…</span></div>
+  </section>
+  <section class="panel" aria-label="Controls">
+    <div class="controls">
+      <div class="ctl">
+        <label for="dur">Duration · <span class="val" id="durVal">20s</span></label>
+        <input type="range" id="dur" min="0" max="60" step="1" value="20">
+      </div>
+      <div class="ctl">
+        <label for="det">Detail · <span class="val" id="detVal">1.0</span></label>
+        <input type="range" id="det" min="0.5" max="2" step="0.1" value="1">
+      </div>
+      <div class="ctl">
+        <label for="thick">Line thickness · <span class="val" id="thickVal">2</span></label>
+        <input type="range" id="thick" min="1" max="5" step="0.5" value="2">
+      </div>
+      <div class="ctl">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="auto" selected>Auto</option>
+          <option value="neon">Neon</option>
+          <option value="photo">Photo</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label for="color">Color style</label>
+        <select id="color">
+          <option value="auto" selected>Auto</option>
+          <option value="original">Original</option>
+          <option value="gradient">Gradient</option>
+        </select>
+      </div>
+      <div class="ctl toggles">
+        <label class="toggle"><input type="checkbox" id="glow" checked> Glow</label>
+        <label class="toggle"><input type="checkbox" id="pentip" checked> Pen tip</label>
+      </div>
+    </div>
+    <div class="buttons">
+      <button class="btn primary" id="playBtn" disabled>↻ Replay</button>
+      <button class="btn" id="pauseBtn" disabled>⏸ Pause</button>
+      <button class="btn" id="skipBtn" disabled>⏭ Skip to end</button>
+      <button class="btn" id="pngBtn" disabled>⬇ Download PNG</button>
+      <button class="btn" id="upBtn">↺ Change image</button>
+      <label class="btn check"><input type="checkbox" id="rec" disabled> Record video (WebM)</label>
+    </div>
+    <div class="progress" id="progWrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="progress-fill" id="progFill"></div>
+    </div>
+    <div class="meta">
+      <span class="status" id="status" aria-live="polite">Loading OpenCV.js…</span>
+      <span id="progPct">0%</span>
+    </div>
+    <div class="error" id="errorBox" hidden></div>
+  </section>
+</main>
+<footer>OpenCV.js runs locally in your browser · no servers, no uploads · PNG + WebM exports</footer>
+<input type="file" id="fileInput" accept="image/*" hidden>
+<script type="module" src="/src/main.js"></script>
+<script>
+  // Race-proof: this fires exactly when OpenCV.js has executed.
+  function cvReady() { window.cvReadyFired = true; window.dispatchEvent(new CustomEvent('opencv-ready')); }
+</script>
+<script async src="opencv.js" onload="cvReady()" onerror="window.__cvErr=1"></script>
+</body>
+</html>
