@@ -49,6 +49,9 @@ async function run() {
     null, { timeout: 40000 });
   R.checks.opencvInit = true;
   log('OpenCV ready');
+  // regression guard: the "Processing…" overlay must not be visible on load
+  // (author display:flex on .spinner used to override the hidden attribute)
+  R.checks.spinnerHiddenOnLoad = await page.isHidden('#spinner');
 
   // 2. auto-detect: neon-on-black image → neon mode + original colors
   log('uploading neon-on-black');
@@ -60,6 +63,8 @@ async function run() {
   await waitStatus('Done', 40000);
   R.checks.firstDrawDone = true;
   log('first draw done');
+  // regression guard: overlay must hide again once processing finished
+  R.checks.spinnerHiddenAfterDraw = await page.isHidden('#spinner');
 
   if (!skipDuration) {
     // 3. Duration 10 → ends in ~10s. Set slider BEFORE upload (fresh timeline).

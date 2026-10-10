@@ -3,5 +3,6 @@ dist/
 test-results/
 playwright-report/
 tests/screenshot-*.png
+tests/verify-*.png
 *.local
 .DS_Store

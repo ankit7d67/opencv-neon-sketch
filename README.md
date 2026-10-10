@@ -73,7 +73,7 @@ node tests/e2e.mjs http://localhost:5173
 node tests/e2e.mjs file:///absolute/path/to/original.html baseline
 ```
 
-The e2e test records console errors and checks: page load, OpenCV init, auto-detect (neon/photo/colorful), a 10-second Duration run, Pause/Resume/Skip/Replay, PNG export, "No lines found" error path, WebM recording, and a 375 px viewport. It also writes a `screenshot-<label>.png` mid-draw for visual comparison.
+The e2e test records console errors and checks: page load, OpenCV init, the "Processing…" overlay being hidden at idle and after processing (it must only appear *during* processing), auto-detect (neon/photo/colorful), a 10-second Duration run, Pause/Resume/Skip/Replay, PNG export, "No lines found" error path, WebM recording, and a 375 px viewport. It also writes a `screenshot-<label>.png` mid-draw for visual comparison, and `tests/verify-spinner.mjs` covers the overlay lifecycle (hidden → visible → hidden).
 
 ## Credits
 
